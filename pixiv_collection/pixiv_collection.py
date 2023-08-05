@@ -10,8 +10,10 @@ from colorthief import ColorThief
 IMAGE_DELETED = 'https://s.pximg.net/common/images/limit_unknown_360.png'
 WAIT_TIME = 1.5
 MAX_RETRY = 3
+PREVIEW_SIZE = (2000, 2000)
 THUMBNAIL_SIZE = (500, 1000)
-LARGE_SIZE = (2000, 2000)
+PREVIEW_QUALITY = 80
+THUMBNAIL_QUALITY = 70
 
 
 def rgb2hex(rgbcolor):
@@ -27,7 +29,7 @@ class PixivCollection():
         refresh_token,
         data_file,
         path_original,
-        path_large,
+        path_preview,
         path_thumbnail,
         log_file: str = None,
         string_io: StringIO = None,
@@ -36,7 +38,7 @@ class PixivCollection():
         self._cache = {}
         self.data_file = data_file
         self.path_original = path_original
-        self.path_large = path_large
+        self.path_preview = path_preview
         self.path_thumbnail = path_thumbnail
         self.__init_pixivapi(refresh_token)
         self.api_available = True
@@ -66,7 +68,6 @@ class PixivCollection():
         '''写出数据'''
         with open(file_name, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False)
-        logger.info(f'写出数据成功，共{len(data)}条')
 
     def __init_pixivapi(self, refresh_token):
         '''初始化PixivAPI'''
@@ -124,9 +125,9 @@ class PixivCollection():
         retry = 0
         success = False
         filename = download_link.split("/")[-1]
-        if not success and retry <= 3:
+        logger.info(f'下载图片: {download_link}')
+        while not success and retry <= 3:
             try:
-                logger.info(f'下载图片: {download_link}')
                 self._api.download(download_link, path=f'{self.path_original}', fname=filename)
                 # 检查图片完整性
                 img = Image.open(f'{self.path_original}{filename}')
@@ -142,8 +143,22 @@ class PixivCollection():
                     logger.info(f'下载失败，重试第{retry}次')
         return success
 
+    def __generate_image_preview(self, image: dict, size: tuple[int, int] = THUMBNAIL_SIZE):
+        '''生成图片预览图'''
+        filename = f'{image["id"]}_p{image["part"]}.{image["ext"]}'
+        filename_preview = f'{image["id"]}_p{image["part"]}.webp'
+        img = Image.open(self.path_original + filename)
+        img.thumbnail(size)
+        if img.mode in ('RGBA', 'LA'):
+            background = Image.new(img.mode[:-1], img.size, 'white')
+            background.paste(img, img.split()[-1])
+            img = background
+        if img.mode == 'P':
+            img = img.convert('RGB')
+        img.save(self.path_preview + filename_preview, 'WEBP', quality=PREVIEW_QUALITY)
+
     def __generate_image_thumbnail(self, image: dict, size: tuple[int, int] = THUMBNAIL_SIZE):
-        '''生成图片预览'''
+        '''生成图片缩略图'''
         filename = f'{image["id"]}_p{image["part"]}.{image["ext"]}'
         filename_thumbnail = f'{image["id"]}_p{image["part"]}.webp'
         img = Image.open(self.path_original + filename)
@@ -154,21 +169,7 @@ class PixivCollection():
             img = background
         if img.mode == 'P':
             img = img.convert('RGB')
-        img.save(self.path_thumbnail + filename_thumbnail, 'WEBP', quality=70)
-
-    def __generate_image_large(self, image: dict, size: tuple[int, int] = THUMBNAIL_SIZE):
-        '''生成图片大图'''
-        filename = f'{image["id"]}_p{image["part"]}.{image["ext"]}'
-        filename_large = f'{image["id"]}_p{image["part"]}.webp'
-        img = Image.open(self.path_original + filename)
-        img.thumbnail(size)
-        if img.mode in ('RGBA', 'LA'):
-            background = Image.new(img.mode[:-1], img.size, 'white')
-            background.paste(img, img.split()[-1])
-            img = background
-        if img.mode == 'P':
-            img = img.convert('RGB')
-        img.save(self.path_large + filename_large, 'WEBP', quality=80)
+        img.save(self.path_thumbnail + filename_thumbnail, 'WEBP', quality=THUMBNAIL_QUALITY)
 
     @staticmethod
     def __get_dominant_color(img: Image.Image):
@@ -281,18 +282,18 @@ class PixivCollection():
         self.__sort_images()
 
     def generate_thumbnail(self, overwrite=False, max_size=THUMBNAIL_SIZE):
-        '''生成预览图'''
+        '''生成缩略图'''
         for image in self.images:
             if not os.path.exists(f'{self.path_thumbnail}{image["id"]}_p{image["part"]}.webp') or overwrite:
                 logger.info(f'生成{image["id"]}_{image["part"]}预览图')
                 self.__generate_image_thumbnail(image, max_size)
 
-    def generate_large(self, overwrite=False, max_size=LARGE_SIZE):
+    def generate_preview(self, overwrite=False, max_size=PREVIEW_SIZE):
         '''生成预览图'''
         for image in self.images:
-            if not os.path.exists(f'{self.path_large}{image["id"]}_p{image["part"]}.webp') or overwrite:
+            if not os.path.exists(f'{self.path_preview}{image["id"]}_p{image["part"]}.webp') or overwrite:
                 logger.info(f'生成{image["id"]}_{image["part"]}大图')
-                self.__generate_image_large(image, max_size)
+                self.__generate_image_preview(image, max_size)
 
     def clean_deleted_images(self):
         '''清理已删除的图片数据'''
@@ -305,8 +306,8 @@ class PixivCollection():
                 self.images.remove(image)
                 if os.path.exists(f'{self.path_thumbnail}{filename_thumbnail}'):
                     os.remove(f'{self.path_thumbnail}{filename_thumbnail}')
-                if os.path.exists(f'{self.path_large}{filename_thumbnail}'):
-                    os.remove(f'{self.path_large}{filename_thumbnail}')
+                if os.path.exists(f'{self.path_preview}{filename_thumbnail}'):
+                    os.remove(f'{self.path_preview}{filename_thumbnail}')
         logger.info('图片数据清理结束')
 
     def fix_from_download_history(self, download_history_file: str):
@@ -359,21 +360,28 @@ class PixivCollection():
             # 检测尺寸不匹配的图片
             try:
                 filename = f'{image["id"]}_p{image["part"]}.{image["ext"]}'
+                filename_preview = f'{image["id"]}_p{image["part"]}.webp'
                 filename_thumbnail = f'{image["id"]}_p{image["part"]}.webp'
                 img = Image.open(self.path_original + filename)
                 if img.size[0] != image['size'][0] or img.size[1] != image['size'][1]:
                     logger.warning(f'检测到尺寸不匹配的图片：{image["id"]}_{image["part"]}，记录尺寸：{image["size"]}，实际尺寸：{img.size}')
                     if try_fix:
+                        # 修正图片尺寸信息
                         image['size'] = img.size
                         logger.info(f'已修正图片{image["id"]}_{image["part"]}尺寸，{image["size"]}')
+
+                        # 重新生成预览图
+                        if os.path.exists(self.path_preview + filename_preview):
+                            os.remove(self.path_preview + filename_preview)
+                        logger.info(f'更新图片{image["id"]}_{image["part"]}预览图')
+                        self.__generate_image_preview(image)
+
+                        # 重新生成缩略图
                         if os.path.exists(self.path_thumbnail + filename_thumbnail):
                             os.remove(self.path_thumbnail + filename_thumbnail)
-                        logger.info(f'更新图片{image["id"]}_{image["part"]}预览图')
+                        logger.info(f'更新图片{image["id"]}_{image["part"]}缩略图')
                         self.__generate_image_thumbnail(image)
-                        if os.path.exists(self.path_large + filename_thumbnail):
-                            os.remove(self.path_large + filename_thumbnail)
-                        logger.info(f'更新图片{image["id"]}_{image["part"]}大图')
-                        self.__generate_image_large(image)
+
                 if image.get('dominant_color') is None:
                     color = self.__get_dominant_color(img)
                     logger.info(f'获取图片{image["id"]}_{image["part"]}主色：{color}')
