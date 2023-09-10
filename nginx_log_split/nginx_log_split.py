@@ -55,7 +55,7 @@ def split_file(log_file, save_dir, remain_days=7):
                 os.makedirs(log_subdir, exist_ok=True)
 
                 # 构造新的日志文件路径
-                new_log_file = f"{filename.rsplit('.', maxsplit=1)[0]}_{log_date}.log"
+                new_log_file = f"{filename.rsplit('.', 1)[0]}_{log_date}.log"
                 new_log_file_path = os.path.join(log_subdir, new_log_file)
 
                 # 将日志行写入对应的日志文件
@@ -72,7 +72,7 @@ def split_file(log_file, save_dir, remain_days=7):
             continue
 
         for log_file in os.listdir(subdir_path):
-            log_file_date_str = log_file.rsplit("_")[1].split(".")[0]
+            log_file_date_str = log_file.rsplit("_", 1)[1].split(".", 1)[0]
             log_file_date = datetime.strptime(log_file_date_str, "%Y-%m-%d").date()
             if current_date - log_file_date > timedelta(days=remain_days):
                 logger.info(f'删除过期日志文件: {log_file}')
@@ -80,7 +80,7 @@ def split_file(log_file, save_dir, remain_days=7):
     logger.info(f'过期日志文件清理完成')
 
 
-def spilt_folder(folder_path, save_dir, remain_days=7):
+def split_folder(folder_path, save_dir, remain_days=7):
     '''
     将日志文件夹下的所有日志文件按照日期切分，并清理过期的日志文件
     :param folder_path: 日志文件夹路径
@@ -94,6 +94,6 @@ def spilt_folder(folder_path, save_dir, remain_days=7):
             continue
         if not file.endswith('.log'):
             continue
-        log_name = file.rsplit('.', maxsplit=1)[0]
+        log_name = file.rsplit('.', 1)[0]
         log_save_dir = os.path.join(save_dir, log_name)
         split_file(log_file, log_save_dir, remain_days)
