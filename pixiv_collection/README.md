@@ -13,13 +13,14 @@
 脚本默认会进行以下操作：
 
 1. 检查 refresh token 是否可用
-2. 读取 `images.json` 中的数据
+2. 读取 `collection.json` 中的数据
 3. 获取用户公开收藏图片和不公开收藏图片各自的前两页，下载不存在于本地的图片
 4. 获取新增图片的信息
 5. 在 `image/preview` 目录下生成 WebP 格式预览图（尺寸不大于 2000*2000，质量 80）
 6. 在 `image/thumbnail` 目录下生成 WebP 格式缩略图（尺寸不大于 500*1000，质量 70）
 7. 将本地不存在的文件从数据中删除
-8. 将数据保存到 `images.json` 文件
+8. 将数据保存到 `collection.json` 文件
+9. 导出可用于 PixivCollection 的数据到 `images.json` 文件
 
 ## 数据格式
 
@@ -46,6 +47,8 @@ interface Image {
   created_at: string
   sanity_level: number
   x_restrict: number
+  bookmark: number
+  view: number
   dominant_color: string
 }
 ```
