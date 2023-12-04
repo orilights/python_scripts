@@ -1,11 +1,12 @@
-# [Pixiv Collection](https://github.com/orilights/PixivCollection) 项目相关脚本
+# [PixivCollection](https://github.com/orilights/PixivCollection) 项目相关脚本
 
 ## 教程
 
 简要的使用教程
 
 1. 爬取图片（推荐使用 [Powerful Pixiv Downloader](https://github.com/xuejianxianzun/PixivBatchDownloader) 浏览器拓展）并按照 `[pid]_p[part].[ext]` 命名，放置于 `image/original` 目录下
-2. 下载或克隆本项目，安装 Python （开发环境为 Python 3.10）与相关依赖（pip install -r requirements.txt）
+   1. 如图片较少可跳过此步，直接使用本脚本爬取图片
+2. 下载或克隆本项目，安装 Python （开发环境为 Python 3.11）与相关依赖（pip install -r requirements.txt）
 3. 获取 Pixiv 账号的 refresh token，具体步骤请参照 [Pixiv OAuth Flow](https://gist.github.com/ZipFile/c9ebedb224406f4f11845ab700124362) 或 [Pixiv OAuth Flow (with Selenium)](https://gist.github.com/upbit/6edda27cb1644e94183291109b8a5fde)
 4. 将 `USER_ID` 和 `REFRESH_TOKEN` 填入 `example.py` 的对应位置
 5. 执行 `python example.py`
@@ -15,10 +16,10 @@
 1. 检查 refresh token 是否可用
 2. 读取 `collection.json` 中的数据
 3. 获取用户公开收藏图片和不公开收藏图片各自的前两页，下载不存在于本地的图片
-4. 获取新增图片的信息
-5. 在 `image/preview` 目录下生成 WebP 格式预览图（尺寸不大于 2000*2000，质量 80）
-6. 在 `image/thumbnail` 目录下生成 WebP 格式缩略图（尺寸不大于 500*1000，质量 70）
-7. 将本地不存在的文件从数据中删除
+4. 检测本地文件变动
+5. 获取新增图片的信息
+6. 在 `image/preview` 目录下生成 WebP 格式预览图（尺寸不大于 2000*2000，质量 80）
+7. 在 `image/thumbnail` 目录下生成 WebP 格式缩略图（尺寸不大于 500*1000，质量 70）
 8. 将数据保存到 `collection.json` 文件
 9. 导出可用于 PixivCollection 的数据到 `images.json` 文件
 
