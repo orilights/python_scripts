@@ -65,7 +65,7 @@ class PixivCollection():
                 result = self.__api.illust_detail(illust_id)
                 logger.debug(json.dumps(result))
                 if result.get('error', None):
-                    logger.info(
+                    logger.warning(
                         f'获取插画{illust_id}信息失败,原因: {result["error"]["user_message"]}'
                     )
                     return None
@@ -213,18 +213,49 @@ class PixivCollection():
                 f'删除缩略图: {self.__path["thumbnail"]}{filename_thumbnail}')
             os.remove(self.__path['thumbnail'] + filename_thumbnail)
 
-    def __update_data(self, data: dict, key: str | int, value: dict):
+    def __update_data(self, type: str, key: str | int, value: dict):
         '''更新数据'''
-
-        data[str(key)] = {
-            'update': timestamp(),
-            'data': value,
-        }
+        logger.debug(f'更新数据: {type}:{key}')
+        if type == 'author':
+            self.authors[str(key)] = {
+                'update': timestamp(),
+                'data': value,
+            }
+        elif type == 'image':
+            self.images[str(key)] = {
+                'update': timestamp(),
+                'data': value,
+            }
+        elif type == 'tag':
+            self.tags[str(key)] = {
+                'update': timestamp(),
+                'data': value,
+            }
+        elif type == 'file':
+            self.files[str(key)] = {
+                'update': timestamp(),
+                'data': value,
+            }
+        else:
+            logger.error(f'未知数据类型: {type}')
 
     def __size_match(self, size1: tuple[int, int], size2: tuple[int, int]):
         '''判断尺寸是否匹配'''
 
         return size1[0] == size2[0] and size1[1] == size2[1]
+
+    def convert_image_info(self, image_info: dict):
+        return {
+            'id': image_info['id'],
+            'author_id': image_info['user']['id'],
+            'title': image_info['title'],
+            'tags': [tag["name"] for tag in image_info['tags']],
+            'created_at': image_info['create_date'],
+            'sanity_level': image_info['sanity_level'],
+            'x_restrict': image_info['x_restrict'],
+            'bookmark': image_info['total_bookmarks'],
+            'view': image_info['total_view'],
+        }
 
     def add_logger(self, target, level='INFO'):
         if isinstance(target, str):
@@ -299,7 +330,11 @@ class PixivCollection():
             f'保存数据成功, 文件:{len(self.files)} 图片:{len(self.images)} 作者:{len(self.authors)} 标签:{len(self.tags)}'
         )
 
-    def download_bookmark(self, user_id: int, type='public', max_page=1):
+    def download_bookmark(self,
+                          user_id: int,
+                          type='public',
+                          max_page=1,
+                          update_image_data=True):
         '''下载用户收藏'''
 
         download_list = []
@@ -330,11 +365,23 @@ class PixivCollection():
                 if image['visible'] == False:
                     logger.warning(f'图片{image["id"]}已被删除或设置为非公开,跳过下载')
                     continue
-                if image['id'] not in id_list:
-                    # 缓存插画信息
-                    self.__cache[f'illust_info_{image["id"]}'] = {
-                        'illust': image
-                    }
+                # 缓存插画信息
+                self.__cache[f'illust_info_{image["id"]}'] = {'illust': image}
+                if image['id'] in id_list:
+                    if update_image_data:
+                        # 更新图片数据
+                        self.__update_data('image', image['id'],
+                                           self.convert_image_info(image))
+                        self.__update_data(
+                            'author', image['user']['id'], {
+                                'id': image['user']['id'],
+                                'name': image['user']['name'],
+                                'account': image['user']['account'],
+                            })
+                        for tag in image['tags']:
+                            tag_name = tag['name']
+                            self.__update_data('tag', tag_name, tag)
+                else:
                     # 判断是否为多图
                     if image['page_count'] == 1:
                         download_list.append(
@@ -461,7 +508,7 @@ class PixivCollection():
             if filename not in self.files:
                 logger.info(f'检测到新增文件: {filename}')
                 file_info = self.__get_file_info(filename)
-                self.__update_data(self.files, filename, file_info)
+                self.__update_data('file', filename, file_info)
 
         # 检测变动文件
         for filename in self.files:
@@ -472,7 +519,7 @@ class PixivCollection():
             if not self.__size_match(file['size'], file_act_size):
                 logger.info(f'检测到尺寸变动文件: {filename}')
                 file_info = self.__get_file_info(filename)
-                self.__update_data(self.files, filename, file_info)
+                self.__update_data('file', filename, file_info)
                 self.__delete_image_preview(file_info)
                 self.__delete_image_thumbnail(file_info)
 
@@ -487,27 +534,17 @@ class PixivCollection():
 
             if image_info is None:
                 logger.error(f'获取插画信息失败: {image_id}')
+                continue
 
             logger.info(f'获取插画信息成功: {image_id}')
 
             author_id = image_info['illust']['user']['id']
 
-            self.__update_data(
-                self.images, image_id, {
-                    'id': int(image_id),
-                    'author_id': author_id,
-                    'title': image_info['illust']['title'],
-                    'tags':
-                    [tag["name"] for tag in image_info['illust']['tags']],
-                    'created_at': image_info['illust']['create_date'],
-                    'sanity_level': image_info['illust']['sanity_level'],
-                    'x_restrict': image_info['illust']['x_restrict'],
-                    'bookmark': image_info['illust']['total_bookmarks'],
-                    'view': image_info['illust']['total_view'],
-                })
+            self.__update_data('image', image_id,
+                               self.convert_image_info(image_info['illust']))
 
             self.__update_data(
-                self.authors, author_id, {
+                'author', author_id, {
                     'id': author_id,
                     'name': image_info['illust']['user']['name'],
                     'account': image_info['illust']['user']['account'],
@@ -515,7 +552,7 @@ class PixivCollection():
 
             for tag in image_info['illust']['tags']:
                 tag_name = tag['name']
-                self.__update_data(self.tags, tag_name, tag)
+                self.__update_data('tag', tag_name, tag)
         logger.info('图片数据更新完成')
 
     def check(self,
