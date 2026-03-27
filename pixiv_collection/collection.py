@@ -2,6 +2,7 @@ import json
 import os
 import sys
 import time
+import re
 from io import StringIO
 
 from loguru import logger
@@ -34,6 +35,14 @@ def get_dominant_color(img: Image.Image):
     return rgb2hex(dominant_color)
 
 
+def normalize_filename(filename):
+    pattern = r'^(\d+)(?:-[^_]+)?(_p\d+\.\w+)$'
+    match = re.match(pattern, filename)
+    if match:
+        return match.group(1) + match.group(2)
+    return filename
+
+
 class PixivCollection():
 
     def __init__(self):
@@ -50,6 +59,10 @@ class PixivCollection():
         self.images = {}
         self.tags = {}
         self.files = {}
+
+    def __list_files(self, path):
+        files = os.listdir(path)
+        return [f for f in files if os.path.isfile(os.path.join(path, f))]
 
     def __get_illust_info(self, illust_id: int | str):
         '''API 获取插画信息'''
@@ -124,12 +137,14 @@ class PixivCollection():
         size = image_obj.size
         dominant_color = get_dominant_color(image_obj)
         image_obj.close()
+        filesize = os.path.getsize(file_path)
         return {
             'id': image_id,
             'part': part,
             'size': size,
             'ext': ext,
             'dominant_color': dominant_color,
+            'filesize': filesize,
         }
 
     def __download_image(self, download_link: str):
@@ -137,7 +152,7 @@ class PixivCollection():
 
         retry = 0
         success = False
-        filename = download_link.split("/")[-1]
+        filename = normalize_filename(download_link.split("/")[-1])
         logger.info(f'下载图片: {download_link}')
         while not success and retry <= 3:
             try:
@@ -249,6 +264,7 @@ class PixivCollection():
             'id': image_info['id'],
             'author_id': image_info['user']['id'],
             'title': image_info['title'],
+            'caption': image_info['caption'],
             'tags': [tag["name"] for tag in image_info['tags']],
             'created_at': image_info['create_date'],
             'sanity_level': image_info['sanity_level'],
@@ -338,8 +354,11 @@ class PixivCollection():
         '''下载用户收藏'''
 
         download_list = []
-        local_files = os.listdir(self.__path['original'])
-        id_list = [int(filename.split('_')[0]) for filename in local_files]
+        local_files = self.__list_files(self.__path['original'])
+        id_list = [
+            int(normalize_filename(filename).split('_')[0])
+            for filename in local_files
+        ]
         cur_page = 1
         next_url = None
 
@@ -358,8 +377,8 @@ class PixivCollection():
             logger.debug(json.dumps(images))
 
             for image in images:
-                # 跳过动图
-                if image['type'] != 'illust':
+                # 只下载插画和漫画
+                if image['type'] not in ['illust', 'manga']:
                     continue
                 # 跳过已被删除或设置为非公开的图片
                 if image['visible'] == False:
@@ -459,15 +478,27 @@ class PixivCollection():
     def diff(self):
         '''检测文件变动'''
 
-        local_files = os.listdir(self.__path['original'])
+        local_files = self.__list_files(self.__path['original'])
+
+        for filename in local_files:
+            if (filename != normalize_filename(filename)):
+                logger.warning(
+                    f'检测到异常名称文件: {filename}, 修正为: {normalize_filename(filename)}'
+                )
+                os.rename(
+                    f'{self.__path["original"]}{filename}',
+                    f'{self.__path["original"]}{normalize_filename(filename)}')
+
+        local_files = self.__list_files(self.__path['original'])
 
         # 检测冲突文件
         index = {}
         for filename in local_files:
-            filename, ext = filename.split('.')
-            if filename not in index:
-                index[filename] = []
-            index[filename].append(ext)
+            pid, ext = filename.split('.')
+            if pid not in index:
+                index[pid] = []
+            index[pid].append(ext)
+
         for filename in index:
             if len(index[filename]) > 1:
                 # 手动解决冲突
@@ -512,12 +543,14 @@ class PixivCollection():
 
         # 检测变动文件
         for filename in self.files:
-            file = self.files[filename]['data']
-            image_obj = Image.open(self.__path['original'] + filename)
-            file_act_size = image_obj.size
-            image_obj.close()
-            if not self.__size_match(file['size'], file_act_size):
-                logger.info(f'检测到尺寸变动文件: {filename}')
+            file_data = self.files[filename]['data']
+            filesize = os.path.getsize(self.__path['original'] + filename)
+            if file_data.get('filesize', None) is None:
+                file_data['filesize'] = filesize
+                file_info = self.__get_file_info(filename)
+                self.__update_data('file', filename, file_info)
+            if file_data['filesize'] != filesize:
+                logger.info(f'检测到文件大小变动: {filename}')
                 file_info = self.__get_file_info(filename)
                 self.__update_data('file', filename, file_info)
                 self.__delete_image_preview(file_info)
@@ -585,8 +618,13 @@ class PixivCollection():
                 if self.images[image_id]['data']['view'] <= 0:
                     logger.warning(f'检测到无浏览数图片: {file["id"]}_{file["part"]}')
 
-    def export(self, file_path: str, filter_max_sl: int = -1):
+    def export(self,
+               file_path: str,
+               filter_max_sl: int = -1,
+               exclude_items: dict = {}):
         '''导出数据'''
+        exclude_author = exclude_items.get('author', [])
+        exclude_illust = exclude_items.get('illust', [])
         result = []
         for file in self.files:
             image_id = str(self.files[file]['data']['id'])
@@ -594,6 +632,10 @@ class PixivCollection():
                 if self.images[image_id]['data'][
                         'sanity_level'] > filter_max_sl:
                     continue
+            if self.images[image_id]['data']['author_id'] in exclude_author:
+                continue
+            if self.images[image_id]['data']['id'] in exclude_illust:
+                continue
             author_id = str(self.images[image_id]['data']['author_id'])
             image = {
                 'id':
