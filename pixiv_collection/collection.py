@@ -260,12 +260,25 @@ class PixivCollection():
         return size1[0] == size2[0] and size1[1] == size2[1]
 
     def convert_image_info(self, image_info: dict):
+        def _is_ai_generated(illust: dict) -> bool:
+            for key in ('illust_ai_type', 'ai_type', 'aiType'):
+                if key in illust and illust[key] is not None:
+                    try:
+                        return int(illust[key]) == 2
+                    except Exception:
+                        continue
+            return False
+
+        tags = [tag["name"] for tag in image_info['tags']]
+        if _is_ai_generated(image_info) and 'AI生成' not in tags:
+            tags.insert(0, 'AI生成')
+
         return {
             'id': image_info['id'],
             'author_id': image_info['user']['id'],
             'title': image_info['title'],
             'caption': image_info['caption'],
-            'tags': [tag["name"] for tag in image_info['tags']],
+            'tags': tags,
             'created_at': image_info['create_date'],
             'sanity_level': image_info['sanity_level'],
             'x_restrict': image_info['x_restrict'],
@@ -400,6 +413,12 @@ class PixivCollection():
                         for tag in image['tags']:
                             tag_name = tag['name']
                             self.__update_data('tag', tag_name, tag)
+                        if 'AI生成' in self.images[str(image['id'])]['data']['tags']:
+                            if 'AI生成' not in self.tags:
+                                self.__update_data('tag', 'AI生成', {
+                                    'name': 'AI生成',
+                                    'translated_name': 'AI-Generated',
+                                })
                 else:
                     # 判断是否为多图
                     if image['page_count'] == 1:
@@ -586,6 +605,12 @@ class PixivCollection():
             for tag in image_info['illust']['tags']:
                 tag_name = tag['name']
                 self.__update_data('tag', tag_name, tag)
+            if 'AI生成' in self.images[str(image_id)]['data']['tags']:
+                if 'AI生成' not in self.tags:
+                    self.__update_data('tag', 'AI生成', {
+                        'name': 'AI生成',
+                        'translated_name': 'AI-Generated',
+                    })
         logger.info('图片数据更新完成')
 
     def check(self,
