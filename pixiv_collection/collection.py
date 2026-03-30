@@ -270,8 +270,8 @@ class PixivCollection():
             return False
 
         tags = [tag["name"] for tag in image_info['tags']]
-        if _is_ai_generated(image_info) and 'AI生成' not in tags:
-            tags.insert(0, 'AI生成')
+        if _is_ai_generated(image_info) and 'AIイラスト' not in tags:
+            tags.insert(0, 'AIイラスト')
 
         return {
             'id': image_info['id'],
@@ -413,11 +413,11 @@ class PixivCollection():
                         for tag in image['tags']:
                             tag_name = tag['name']
                             self.__update_data('tag', tag_name, tag)
-                        if 'AI生成' in self.images[str(image['id'])]['data']['tags']:
-                            if 'AI生成' not in self.tags:
-                                self.__update_data('tag', 'AI生成', {
-                                    'name': 'AI生成',
-                                    'translated_name': 'AI-Generated',
+                        if 'AIイラスト' in self.images[str(image['id'])]['data']['tags']:
+                            if 'AIイラスト' not in self.tags:
+                                self.__update_data('tag', 'AIイラスト', {
+                                    'name': 'AIイラスト',
+                                    'translated_name': 'AI 画作',
                                 })
                 else:
                     # 判断是否为多图
@@ -605,11 +605,11 @@ class PixivCollection():
             for tag in image_info['illust']['tags']:
                 tag_name = tag['name']
                 self.__update_data('tag', tag_name, tag)
-            if 'AI生成' in self.images[str(image_id)]['data']['tags']:
-                if 'AI生成' not in self.tags:
-                    self.__update_data('tag', 'AI生成', {
-                        'name': 'AI生成',
-                        'translated_name': 'AI-Generated',
+            if 'AIイラスト' in self.images[str(image_id)]['data']['tags']:
+                if 'AIイラスト' not in self.tags:
+                    self.__update_data('tag', 'AIイラスト', {
+                        'name': 'AIイラスト',
+                        'translated_name': 'AI 画作',
                     })
         logger.info('图片数据更新完成')
 
