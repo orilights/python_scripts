@@ -260,12 +260,26 @@ class PixivCollection():
         return size1[0] == size2[0] and size1[1] == size2[1]
 
     def convert_image_info(self, image_info: dict):
+        def _is_ai_generated(illust: dict) -> bool:
+            for key in ('illust_ai_type', 'ai_type', 'aiType'):
+                if key in illust and illust[key] is not None:
+                    try:
+                        if int(illust[key]) == 2:
+                            return True
+                    except Exception:
+                        continue
+            return False
+
+        tags = [tag["name"] for tag in image_info['tags']]
+        if _is_ai_generated(image_info) and 'AIイラスト' not in tags:
+            tags.insert(0, 'AIイラスト')
+
         return {
             'id': image_info['id'],
             'author_id': image_info['user']['id'],
             'title': image_info['title'],
             'caption': image_info['caption'],
-            'tags': [tag["name"] for tag in image_info['tags']],
+            'tags': tags,
             'created_at': image_info['create_date'],
             'sanity_level': image_info['sanity_level'],
             'x_restrict': image_info['x_restrict'],
@@ -400,6 +414,7 @@ class PixivCollection():
                         for tag in image['tags']:
                             tag_name = tag['name']
                             self.__update_data('tag', tag_name, tag)
+                        self.__ensure_ai_tag_defined(image_id=image['id'])
                 else:
                     # 判断是否为多图
                     if image['page_count'] == 1:
@@ -586,8 +601,18 @@ class PixivCollection():
             for tag in image_info['illust']['tags']:
                 tag_name = tag['name']
                 self.__update_data('tag', tag_name, tag)
+            self._ensure_ai_illust_tag(image_id)
         logger.info('图片数据更新完成')
 
+    def _ensure_ai_illust_tag(self, image_id):
+        """Ensure the AI illustration tag is registered when present on an image."""
+        image_id_str = str(image_id)
+        if 'AIイラスト' in self.images[image_id_str]['data']['tags']:
+            if 'AIイラスト' not in self.tags:
+                self.__update_data('tag', 'AIイラスト', {
+                    'name': 'AIイラスト',
+                    'translated_name': 'AI 画作',
+                })
     def check(self,
               chexk_tag=False,
               check_title=False,
