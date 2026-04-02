@@ -601,14 +601,18 @@ class PixivCollection():
             for tag in image_info['illust']['tags']:
                 tag_name = tag['name']
                 self.__update_data('tag', tag_name, tag)
-            if 'AIイラスト' in self.images[str(image_id)]['data']['tags']:
-                if 'AIイラスト' not in self.tags:
-                    self.__update_data('tag', 'AIイラスト', {
-                        'name': 'AIイラスト',
-                        'translated_name': 'AI 画作',
-                    })
+            self._ensure_ai_illust_tag(image_id)
         logger.info('图片数据更新完成')
 
+    def _ensure_ai_illust_tag(self, image_id):
+        """Ensure the AI illustration tag is registered when present on an image."""
+        image_id_str = str(image_id)
+        if 'AIイラスト' in self.images[image_id_str]['data']['tags']:
+            if 'AIイラスト' not in self.tags:
+                self.__update_data('tag', 'AIイラスト', {
+                    'name': 'AIイラスト',
+                    'translated_name': 'AI 画作',
+                })
     def check(self,
               chexk_tag=False,
               check_title=False,
