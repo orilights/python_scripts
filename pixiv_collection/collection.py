@@ -264,7 +264,8 @@ class PixivCollection():
             for key in ('illust_ai_type', 'ai_type', 'aiType'):
                 if key in illust and illust[key] is not None:
                     try:
-                        return int(illust[key]) == 2
+                        if int(illust[key]) == 2:
+                            return True
                     except Exception:
                         continue
             return False
