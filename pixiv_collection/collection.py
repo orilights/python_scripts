@@ -414,12 +414,7 @@ class PixivCollection():
                         for tag in image['tags']:
                             tag_name = tag['name']
                             self.__update_data('tag', tag_name, tag)
-                        if 'AIイラスト' in self.images[str(image['id'])]['data']['tags']:
-                            if 'AIイラスト' not in self.tags:
-                                self.__update_data('tag', 'AIイラスト', {
-                                    'name': 'AIイラスト',
-                                    'translated_name': 'AI 画作',
-                                })
+                        self.__ensure_ai_tag_defined(image_id=image['id'])
                 else:
                     # 判断是否为多图
                     if image['page_count'] == 1:
